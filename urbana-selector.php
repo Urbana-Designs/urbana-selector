@@ -41,6 +41,8 @@ spl_autoload_register(
 class UrbanaSelector {
 
 	public function __construct() {
+		Urbana\GuildLedger\GuildLedgerManager::get_instance();
+
 		add_action( 'init', array( $this, 'init' ) );
 		register_activation_hook( __FILE__, array( $this, 'activate' ) );
 		register_deactivation_hook( __FILE__, array( $this, 'deactivate' ) );
@@ -64,6 +66,9 @@ class UrbanaSelector {
 
 		// Initialize database
 		new Urbana\Database\DatabaseManager();
+
+		// Initialize guild ledger - disabled for now
+		// new Urbana\GuildLedger\GuildLedgerManager();
 	}
 
 	public function activate() {
@@ -71,12 +76,16 @@ class UrbanaSelector {
 		$db_manager = new Urbana\Database\DatabaseManager();
 		$db_manager->create_tables();
 
+		Urbana\GuildLedger\GuildLedgerManager::get_instance()->activate();
+
 		// Flush rewrite rules
 		flush_rewrite_rules();
 	}
 
 	public function deactivate() {
 		// Clean up if needed
+		Urbana\GuildLedger\GuildLedgerManager::get_instance()->deactivate();
+
 		flush_rewrite_rules();
 	}
 }

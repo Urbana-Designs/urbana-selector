@@ -10,20 +10,33 @@ class AdminInit {
 	}
 
 	public function add_admin_menu() {
-		// Main menu page
-		add_menu_page(
-			'Urbana Selector',
-			'Urbana Selector',
+		// Selector main menu
+		$this->selector_hook = array_filter(
+			array(
+				add_menu_page(
+			'Urbana',
+			'Urbana',
 			'manage_options',
-			'urbana-selector',
+			'urbana-main',
 			array( $this, 'admin_page' ),
 			'dashicons-hammer',
 			30
+				),
+
+				add_submenu_page(
+			'urbana-main',
+			'Urbana Selector',
+			'Selector',
+			'manage_options',
+			'urbana-selector',
+			array( $this, 'admin_page' ),
+				),
+			)
 		);
 
 		// Data Builder submenu
-		add_submenu_page(
-			'urbana-selector',
+		$this->data_builder_hook = add_submenu_page(
+			'urbana-main',
 			'Data Builder',
 			'Data Builder',
 			'manage_options',
@@ -32,14 +45,18 @@ class AdminInit {
 		);
 
 		// Orders submenu
-		add_submenu_page(
-			'urbana-selector',
+		$this->orders_hook = add_submenu_page(
+			'urbana-main',
 			'Customer Orders',
 			'Customer Orders',
 			'manage_options',
 			'urbana-orders',
 			array( $this, 'orders_page' )
 		);
+
+		// Remove the default "Urbana" submenu item created for the top-level Urbana admin menu
+		// it only changes what appears in the admin menu, not whether the underlying page exists or is accessible
+		remove_submenu_page( 'urbana-main', 'urbana-main' );
 	}
 
 	public function admin_page() {
@@ -69,6 +86,18 @@ class AdminInit {
 		echo '</div>';
 	}
 
+	/**
+	 * Hook suffixes for all admin pages.
+	 *
+	 * @var selector_hook array<int, string>
+	 * @var data_builder_hook string
+	 * @var orders_hook string
+	 */
+
+	private $selector_hook = array();
+	private $data_builder_hook = '';
+	private $orders_hook = '';
+
 	public function enqueue_admin_scripts( $hook ) {
 		// Only load scripts on our admin pages.
 		if ( strpos( $hook, 'urbana-' ) === false ) {
@@ -78,7 +107,7 @@ class AdminInit {
 		$asset_file = URBANA_PLUGIN_PATH . 'assets/dist/';
 
 		// Settings App (Main page).
-		if ( 'toplevel_page_urbana-selector' === $hook ) {
+		if ( in_array( $hook, $this->selector_hook, true ) ) {
 			if ( file_exists( $asset_file . 'settings-app.js' ) ) {
 
 				wp_enqueue_script(
@@ -126,7 +155,7 @@ class AdminInit {
 		}
 
 		// Data Builder App.
-		if ( 'urbana-selector_page_urbana-data-builder' === $hook ) {
+		if ( $this->data_builder_hook === $hook ) {
 			if ( file_exists( $asset_file . 'data-builder-app.js' ) ) {
 
 				wp_enqueue_media();
@@ -182,7 +211,7 @@ class AdminInit {
 		}
 
 		// Admin Orders App.
-		if ( 'urbana-selector_page_urbana-orders' === $hook ) {
+		if ( $this->orders_hook === $hook ) {
 			if ( file_exists( $asset_file . 'admin-orders-app.js' ) ) {
 				wp_enqueue_script(
 					'urbana-admin-orders',
