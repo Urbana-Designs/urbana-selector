@@ -17,7 +17,6 @@ class AddNewEntryPage {
 	}
 
 	public static function enqueue_scripts( $hook ) {
-		// Load on the Add New Entry page
 		$screen = get_current_screen();
 		if ( !$screen || $screen->post_type !== GuildLedgerManager::POST_TYPE || $screen->base !== 'post' ) {
 			return;

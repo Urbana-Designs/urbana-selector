@@ -17,7 +17,6 @@ class AllEntriesPage {
 	}
 
 	public static function enqueue_scripts( $hook ) {
-		// Load on the All Entries list page
 		$screen = get_current_screen();
 		if ( !$screen || $screen->post_type !== GuildLedgerManager::POST_TYPE || $screen->base !== 'edit' ) {
 			return;

@@ -29,6 +29,10 @@ class GuildLedgerManager {
 		add_action('pre_get_posts', array($this, 'custom_orderby'));
 	}
 
+	public function can_manage_guild_ledger() {
+		return current_user_can('manage_options');
+	}
+
 	public function activate() {
 		$this->register_post_type();
 		$this->register_taxonomies();
@@ -348,35 +352,43 @@ class GuildLedgerManager {
 
 	public function enqueue_admin_scripts($hook) {
 		$screen = get_current_screen();
-		if (!$screen) return;
+		if (!$screen) {
+			return;
+		}
 
-		// Check if we're on a ledger-related screen
-		$is_ledger_post_screen = ($screen->post_type === self::POST_TYPE && 
-								  ($screen->base === 'post' || $screen->base === 'edit'));
-		
-		$is_lead_status_screen = ($screen->taxonomy === 'lead_status' && 
-								  $screen->base === 'edit-tags');
-		
-		$is_dashboard_page = ($hook === 'toplevel_page_urbana-main');
+		$is_ledger_list_screen = (
+			$screen->post_type === self::POST_TYPE &&
+			$screen->base === 'edit'
+		);
 
-		if (!$is_ledger_post_screen && !$is_lead_status_screen && !$is_dashboard_page) {
+		$is_ledger_post_screen = (
+			$screen->post_type === self::POST_TYPE &&
+			$screen->base === 'post'
+		);
+
+		$is_lead_status_screen = (
+			$screen->taxonomy === 'lead_status' &&
+			$screen->base === 'edit-tags'
+		);
+
+		if (!$is_ledger_list_screen && !$is_ledger_post_screen && !$is_lead_status_screen) {
 			return;
 		}
 
 		$plugin_url = plugin_dir_url(__FILE__);
 
-		wp_enqueue_style('urbana-guild-ledger-admin', $plugin_url . 'urbana-guild-ledger-admin.css', array(), '1.0.1');
-		wp_enqueue_script('urbana-guild-ledger-admin', $plugin_url . 'urbana-guild-ledger-admin.js', array('jquery'), '1.0.1', true);
-		
-		// Add Chart.js for dashboard page
-		if ($is_dashboard_page) {
-			$local_chart = plugin_dir_path(__FILE__) . 'assets/vendor/chart.min.js';
-			if (file_exists($local_chart)) {
-				wp_enqueue_script('chartjs', $plugin_url . 'assets/vendor/chart.min.js', array(), '4.3.0', true);
-			}
-		}
+		wp_enqueue_style('urbana-guild-ledger-admin', $plugin_url . 'urbana-guild-ledger-admin.css', array('wp-components'), URBANA_VERSION);
+		wp_enqueue_script('urbana-guild-ledger-admin', $plugin_url . 'urbana-guild-ledger-admin.js', array('jquery', 'wp-element', 'wp-components', 'wp-data'), URBANA_VERSION, true);
+
+		wp_localize_script('urbana-guild-ledger-admin', 'urbanaLedgerData', array(
+			'postType' => self::POST_TYPE,
+			'nonce' => wp_create_nonce('wp_rest'),
+			'restUrl' => rest_url(),
+			'adminUrl' => admin_url(),
+		));
 	}
 
+	// Ensure default lead statuses exist at plugin activation
 	private function ensure_default_lead_statuses() {
 		$default_statuses = array(
 			'new' => 'New',
@@ -494,98 +506,243 @@ class GuildLedgerManager {
 	}
 
 	public function register_rest_routes() {
-		register_rest_route('urbana-ledger/v1', '/entries', array(
+		register_rest_route('urbana-guild-ledger/v1', '/entries', array(
 			'methods' => 'GET',
 			'callback' => array($this, 'get_entries'),
-			'permission_callback' => function() {
-				return current_user_can('manage_options');
-			},
+			'permission_callback' => array($this, 'can_manage_guild_ledger'),
+		));
+
+		register_rest_route('urbana-guild-ledger/v1', '/lead-statuses', array(
+			'methods' => 'GET',
+			'callback' => array($this, 'get_lead_statuses'),
+			'permission_callback' => array($this, 'can_manage_guild_ledger'),
+		));
+
+		register_rest_route('urbana-guild-ledger/v1', '/stats', array(
+			'methods' => 'GET',
+			'callback' => array($this, 'get_stats'),
+			'permission_callback' => array($this, 'can_manage_guild_ledger'),
 		));
 	}
 
 	public function get_entries($request) {
-		$params = $request->get_params();
-		$search = isset($params['search']) ? sanitize_text_field($params['search']) : '';
-		$interaction_type = isset($params['interaction_type']) ? sanitize_text_field($params['interaction_type']) : '';
-		$lead_status = isset($params['lead_status']) ? sanitize_text_field($params['lead_status']) : '';
-		$date_from = isset($params['date_from']) ? sanitize_text_field($params['date_from']) : '';
-		$date_to = isset($params['date_to']) ? sanitize_text_field($params['date_to']) : '';
+		try {
+			$params = $request->get_params();
+			$search = isset($params['s']) ? sanitize_text_field($params['s']) : (isset($params['search']) ? sanitize_text_field($params['search']) : '');
+			$interaction_type = isset($params['interaction_type']) ? sanitize_text_field($params['interaction_type']) : '';
+			$lead_status = isset($params['lead_status']) ? sanitize_text_field($params['lead_status']) : '';
+			$start_date = isset($params['start_date']) ? sanitize_text_field($params['start_date']) : (isset($params['date_from']) ? sanitize_text_field($params['date_from']) : '');
+			$end_date = isset($params['end_date']) ? sanitize_text_field($params['end_date']) : (isset($params['date_to']) ? sanitize_text_field($params['date_to']) : '');
+			$per_page = isset($params['per_page']) ? max(1, min(100, intval($params['per_page']))) : 20;
+			$page = isset($params['page']) ? max(1, intval($params['page'])) : 1;
 
-		$args = array(
-			'post_type' => self::POST_TYPE,
-			'posts_per_page' => -1,
-			'post_status' => 'publish',
-		);
-
-		$meta_query = array('relation' => 'AND');
-
-		if ($search) {
-			$args['s'] = $search;
-		}
-
-		if ($interaction_type) {
-			$meta_query[] = array(
-				'key' => '_urbana_interaction_type',
-				'value' => $interaction_type,
-				'compare' => '=',
+			$args = array(
+				'post_type' => self::POST_TYPE,
+				'post_status' => array('publish', 'draft', 'pending', 'future', 'private'),
+				'posts_per_page' => $per_page,
+				'paged' => $page,
 			);
-		}
 
-		if ($date_from || $date_to) {
-			$date_query = array();
-			if ($date_from) {
-				$date_query['after'] = $date_from;
-			}
-			if ($date_to) {
-				$date_query['before'] = $date_to;
-			}
-			$meta_query[] = array(
-				'key' => '_urbana_interaction_date',
-				'value' => $date_query,
-				'compare' => 'BETWEEN',
-				'type' => 'DATE',
-			);
-		}
+			$meta_query = array();
 
-		if (!empty($meta_query) && count($meta_query) > 1) {
-			$args['meta_query'] = $meta_query;
-		}
-
-		if ($lead_status) {
-			$args['tax_query'] = array(
-				array(
-					'taxonomy' => 'lead_status',
-					'field' => 'slug',
-					'terms' => $lead_status,
-				),
-			);
-		}
-
-		$query = new WP_Query($args);
-		$entries = array();
-
-		if ($query->have_posts()) {
-			while ($query->have_posts()) {
-				$query->the_post();
-				$post_id = get_the_ID();
-
-				$terms = wp_get_object_terms($post_id, 'lead_status');
-				$status = !empty($terms) && !is_wp_error($terms) ? $terms[0]->name : '';
-
-				$entries[] = array(
-					'id' => $post_id,
-					'title' => get_the_title(),
-					'contact_name' => get_post_meta($post_id, '_urbana_contact_name', true),
-					'company_council' => get_post_meta($post_id, '_urbana_company_council', true),
-					'interaction_date' => get_post_meta($post_id, '_urbana_interaction_date', true),
-					'interaction_type' => get_post_meta($post_id, '_urbana_interaction_type', true),
-					'lead_status' => $status,
-					'edit_url' => get_edit_post_link($post_id),
+			if ($interaction_type) {
+				$meta_query[] = array(
+					'key' => '_urbana_interaction_type',
+					'value' => $interaction_type,
+					'compare' => '=',
 				);
 			}
-			wp_reset_postdata();
+
+			if ($start_date && $end_date) {
+				$meta_query[] = array(
+					'key' => '_urbana_interaction_date',
+					'value' => array($start_date, $end_date),
+					'compare' => 'BETWEEN',
+					'type' => 'DATE',
+				);
+			} elseif ($start_date) {
+				$meta_query[] = array(
+					'key' => '_urbana_interaction_date',
+					'value' => $start_date,
+					'compare' => '>=',
+					'type' => 'DATE',
+				);
+			} elseif ($end_date) {
+				$meta_query[] = array(
+					'key' => '_urbana_interaction_date',
+					'value' => $end_date,
+					'compare' => '<=',
+					'type' => 'DATE',
+				);
+			}
+
+			if ($search) {
+				$meta_query[] = array(
+					'relation' => 'OR',
+					array(
+						'key' => '_urbana_contact_name',
+						'value' => $search,
+						'compare' => 'LIKE',
+					),
+					array(
+						'key' => '_urbana_company_council',
+						'value' => $search,
+						'compare' => 'LIKE',
+					),
+					array(
+						'key' => '_urbana_notes',
+						'value' => $search,
+						'compare' => 'LIKE',
+					),
+				);
+			}
+
+			if (!empty($meta_query)) {
+				if (count($meta_query) > 1) {
+					$meta_query = array_merge(array('relation' => 'AND'), $meta_query);
+				}
+				$args['meta_query'] = $meta_query;
+			}
+
+			if ($lead_status) {
+				$args['tax_query'] = array(
+					array(
+						'taxonomy' => 'lead_status',
+						'field' => 'slug',
+						'terms' => array($lead_status),
+					),
+				);
+			}
+
+			$query = new WP_Query($args);
+			$items = array();
+
+			foreach ($query->posts as $post) {
+				$contact = get_post_meta($post->ID, '_urbana_contact_name', true);
+				$company = get_post_meta($post->ID, '_urbana_company_council', true);
+				$date = get_post_meta($post->ID, '_urbana_interaction_date', true);
+				$type = get_post_meta($post->ID, '_urbana_interaction_type', true);
+				$terms = wp_get_post_terms($post->ID, 'lead_status');
+				$status = !empty($terms) && !is_wp_error($terms) ? $terms[0]->name : '';
+
+				$items[] = array(
+					'id' => $post->ID,
+					'title' => html_entity_decode(get_the_title($post), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+					'edit_url' => get_edit_post_link($post->ID),
+					'contact' => $contact,
+					'company' => $company,
+					'date' => $date ? date_i18n('M j, Y', strtotime($date)) : '',
+					'interaction_type' => $type,
+					'lead_status' => $status,
+				);
+			}
+
+			return rest_ensure_response(array(
+				'items' => $items,
+				'total' => intval($query->found_posts),
+				'pages' => (int) ceil($query->found_posts / $per_page),
+			));
+		} catch (Exception $e) {
+			return new WP_Error('internal_server_error', 'Server error while listing entries', array('status' => 500));
+		}
+	}
+
+	public function get_lead_statuses($request) {
+		try {
+			$terms = get_terms(array('taxonomy' => 'lead_status', 'hide_empty' => false));
+			if (is_wp_error($terms)) {
+				return new WP_Error('lead_status_error', 'Could not load lead statuses', array('status' => 500));
+			}
+
+			$statuses = array();
+			foreach ((array) $terms as $term) {
+				$statuses[] = array(
+					'slug' => $term->slug,
+					'name' => $term->name,
+				);
+			}
+
+			return rest_ensure_response($statuses);
+		} catch (Exception $e) {
+			return new WP_Error('internal_server_error', 'Server error while loading lead statuses', array('status' => 500));
+		}
+	}
+
+	public function get_stats($request) {
+		$cache_key = 'urbana_ledger_stats_v1';
+		$cached = get_transient($cache_key);
+
+		if (false !== $cached) {
+			return rest_ensure_response($cached);
 		}
 
-		return rest_ensure_response($entries);
+		$month_counts = array();
+		$current_timestamp = current_time('timestamp');
+		for ($i = 11; $i >= 0; $i--) {
+			$month_key = wp_date('Y-m', strtotime("-{$i} months", $current_timestamp));
+			$month_counts[$month_key] = 0;
+		}
+
+		$by_type = array(
+			'email' => 0,
+			'video' => 0,
+			'meeting' => 0,
+			'phone' => 0,
+			'other' => 0,
+		);
+
+		$entry_ids = get_posts(array(
+			'post_type' => self::POST_TYPE,
+			'post_status' => array('publish', 'draft', 'pending', 'future', 'private'),
+			'posts_per_page' => -1,
+			'fields' => 'ids',
+			'no_found_rows' => true,
+		));
+
+		foreach ($entry_ids as $entry_id) {
+			$type = get_post_meta($entry_id, '_urbana_interaction_type', true);
+			if ($type) {
+				if (!isset($by_type[$type])) {
+					$by_type[$type] = 0;
+				}
+				$by_type[$type]++;
+			}
+
+			$interaction_date = get_post_meta($entry_id, '_urbana_interaction_date', true);
+			if ($interaction_date) {
+				$month_key = wp_date('Y-m', strtotime($interaction_date));
+				if (isset($month_counts[$month_key])) {
+					$month_counts[$month_key]++;
+				}
+			}
+		}
+
+		$terms = get_terms(array('taxonomy' => 'lead_status', 'hide_empty' => false));
+		if (is_wp_error($terms)) {
+			return new WP_Error('lead_status_error', 'Could not load lead status stats', array('status' => 500));
+		}
+
+		$by_status = array();
+		foreach ((array) $terms as $term) {
+			$by_status[$term->name] = isset($term->count) ? intval($term->count) : 0;
+		}
+
+		$by_month = array();
+		foreach ($month_counts as $month => $count) {
+			$by_month[] = array(
+				'month' => $month,
+				'count' => $count,
+			);
+		}
+
+		$stats = array(
+			'by_type' => $by_type,
+			'by_status' => $by_status,
+			'by_month' => $by_month,
+		);
+
+		set_transient($cache_key, $stats, 5 * MINUTE_IN_SECONDS);
+
+		return rest_ensure_response($stats);
 	}
 }

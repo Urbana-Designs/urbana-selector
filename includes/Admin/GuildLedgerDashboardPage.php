@@ -35,11 +35,10 @@ class GuildLedgerDashboardPage {
 	}
 
 	public static function enqueue_scripts( $hook ) {
-		if ( $hook !== 'urbana_page_urbana-guild-ledger' ) {
+		if ( strpos( $hook, 'urbana-guild-ledger' ) === false ) {
 			return;
 		}
 
-		// Enqueue scripts/styles for dashboard page
 		$plugin_dir = plugin_dir_path( dirname( dirname( __FILE__ ) ) );
 		$plugin_url = plugin_dir_url( dirname( dirname( __FILE__ ) ) );
 
@@ -52,7 +51,6 @@ class GuildLedgerDashboardPage {
 			wp_enqueue_script('chartjs', $plugin_url . 'includes/GuildLedger/assets/vendor/chart.min.js', array(), '4.3.0', true);
 		}
 
-		// Pass data to JavaScript
 		wp_localize_script('urbana-guild-ledger-admin', 'urbanaLedgerData', array(
 			'postType' => GuildLedgerManager::POST_TYPE,
 			'nonce' => wp_create_nonce('wp_rest'),
