@@ -21,13 +21,18 @@ class AdminInit {
 			30
 		);
 
-		// Let each page class register its own submenu
+		// Selector pages
 		SettingsPage::register_submenu();
 		DataBuilderPage::register_submenu();
 		OrdersPage::register_submenu();
 
+		// Guild Ledger pages
+		GuildLedgerDashboardPage::register_submenu();
+		AllEntriesPage::register_submenu();
+		AddNewEntryPage::register_submenu();
+		LeadStatusesPage::register_submenu();
+
 		// Remove the default "Urbana" submenu item created by add_menu_page
-		// it only changes what appears in the admin menu, not whether the underlying page exists or is accessible
 		remove_submenu_page( 'urbana-main', 'urbana-main' );
 	}
 
@@ -42,6 +47,11 @@ class AdminInit {
 		SettingsPage::enqueue_scripts( $hook );
 		DataBuilderPage::enqueue_scripts( $hook );
 		OrdersPage::enqueue_scripts( $hook );
+		
+		// Guild Ledger pages
+		GuildLedgerDashboardPage::enqueue_scripts( $hook );
+		AllEntriesPage::enqueue_scripts( $hook );
+		AddNewEntryPage::enqueue_scripts( $hook );
 	}
 
 	public function register_settings() {

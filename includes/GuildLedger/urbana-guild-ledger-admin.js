@@ -102,38 +102,37 @@
      * Initialize DataViews enhancements for modern list display
      */
     function initDataViewsEnhancements() {
-        // Check if we're on the ledger list page
-        if (!$('body').hasClass('post-type-urbana_ledger') || !$('body').hasClass('edit-php')) {
-            return;
+        var $body = $('body');
+        
+        // Check if we're on any Guild Ledger admin page
+        var isLedgerListPage = $body.hasClass('post-type-urbana_ledger') && $body.hasClass('edit-php');
+        var isLeadStatusPage = $body.hasClass('taxonomy-lead_status') && $body.hasClass('edit-tags-php');
+        var isDashboardPage = $body.hasClass('toplevel_page_urbana-main');
+        var isAddNewPage = $body.hasClass('post-type-urbana_ledger') && $body.hasClass('post-new-php');
+        
+        // Apply list-specific enhancements only on the ledger list page
+        if (isLedgerListPage) {
+            $('.wp-list-table').addClass('urbana-dataviews');
+            $('.post-type-urbana_ledger .wp-list-table tfoot').remove();
+            cleanUpHeaderRows($('.post-type-urbana_ledger .wp-list-table tbody'));
+            enhanceSearchBox();
+            addFilterControls();
+            addMobileDataAttributes();
+            addLiveSearch();
+            enhanceBulkActions();
+            addQuickViewButtons();
+            addExportButton();
         }
-
-        // Add modern styling classes
-        $('.wp-list-table').addClass('urbana-dataviews');
-
-        // Remove any duplicate footer/header rows left in the table by WP or other plugins
-        $('.post-type-urbana_ledger .wp-list-table tfoot').remove();
-        cleanUpHeaderRows($('.post-type-urbana_ledger .wp-list-table tbody'));
-
-        // Enhance search box
-        enhanceSearchBox();
-
-        // Add filters UI (date range, interaction type, lead status)
-        addFilterControls();
-
-        // Add column data attributes for mobile view
-        addMobileDataAttributes();
-
-        // Add real-time search (AJAX)
-        addLiveSearch();
-
-        // Enhance bulk actions
-        enhanceBulkActions();
-
-        // Add quick view functionality
-        addQuickViewButtons();
-
-        // Add export functionality
-        addExportButton();
+        
+        // Apply taxonomy-specific enhancements on Lead Status page
+        if (isLeadStatusPage) {
+            enhanceTaxonomyTable();
+        }
+        
+        // Apply dashboard-specific enhancements
+        if (isDashboardPage) {
+            // Dashboard enhancements already handled separately
+        }
     }
 
     /**
@@ -793,6 +792,27 @@
         var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
         var results = regex.exec(location.search);
         return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+    }
+
+    /**
+     * Enhance taxonomy table (Lead Statuses)
+     */
+    function enhanceTaxonomyTable() {
+        var $table = $('.wp-list-table');
+        if (!$table.length) return;
+        
+        $table.addClass('urbana-dataviews');
+        
+        // Add mobile data attributes
+        $table.find('thead tr').first().children().each(function (index) {
+            var columnName = $(this).text().trim();
+            $table.find('tbody tr').each(function () {
+                var $cell = $(this).find('td, th').eq(index);
+                if ($cell.length && columnName) {
+                    $cell.attr('data-colname', columnName);
+                }
+            });
+        });
     }
 
 })(jQuery);

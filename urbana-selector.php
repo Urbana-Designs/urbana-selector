@@ -41,11 +41,17 @@ spl_autoload_register(
 class UrbanaSelector {
 
 	public function __construct() {
-		Urbana\GuildLedger\GuildLedgerManager::get_instance();
-
+		// Initialize Guild Ledger early so post type is registered before admin menu
+		add_action( 'plugins_loaded', array( $this, 'init_guild_ledger' ), 5 );
+		
 		add_action( 'init', array( $this, 'init' ) );
 		register_activation_hook( __FILE__, array( $this, 'activate' ) );
 		register_deactivation_hook( __FILE__, array( $this, 'deactivate' ) );
+	}
+
+	public function init_guild_ledger() {
+		// Initialize Guild Ledger early
+		new Urbana\GuildLedger\GuildLedgerManager();
 	}
 
 	public function init() {
@@ -54,7 +60,6 @@ class UrbanaSelector {
 
 		// Initialize admin
 		if ( is_admin() ) {
-
 			new Urbana\Admin\AdminInit();
 		}
 
@@ -66,9 +71,6 @@ class UrbanaSelector {
 
 		// Initialize database
 		new Urbana\Database\DatabaseManager();
-
-		// Initialize guild ledger - disabled for now
-		// new Urbana\GuildLedger\GuildLedgerManager();
 	}
 
 	public function activate() {
@@ -76,7 +78,8 @@ class UrbanaSelector {
 		$db_manager = new Urbana\Database\DatabaseManager();
 		$db_manager->create_tables();
 
-		Urbana\GuildLedger\GuildLedgerManager::get_instance()->activate();
+		$guild_ledger = new Urbana\GuildLedger\GuildLedgerManager();
+		$guild_ledger->activate();
 
 		// Flush rewrite rules
 		flush_rewrite_rules();
@@ -84,7 +87,8 @@ class UrbanaSelector {
 
 	public function deactivate() {
 		// Clean up if needed
-		Urbana\GuildLedger\GuildLedgerManager::get_instance()->deactivate();
+		$guild_ledger = new Urbana\GuildLedger\GuildLedgerManager();
+		$guild_ledger->deactivate();
 
 		flush_rewrite_rules();
 	}
