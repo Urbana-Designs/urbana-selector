@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Urbana Selector
  * Description: A WordPress plugin for product configurator with React + Tailwind interface.
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Urbana
  * License: GPL v2 or later
  * Text Domain: urbana-selector
