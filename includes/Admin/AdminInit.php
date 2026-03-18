@@ -27,10 +27,11 @@ class AdminInit {
 		OrdersPage::register_submenu();
 
 		// Guild Ledger pages
-		GuildLedgerDashboardPage::register_submenu();
-		AllEntriesPage::register_submenu();
-		AddNewEntryPage::register_submenu();
-		LeadStatusesPage::register_submenu();
+		\Urbana\GuildLedger\GuildLedgerAdmin::register_submenu();
+		\Urbana\GuildLedger\GuildLedgerDashboard::register_submenu();
+		\Urbana\GuildLedger\AllEntries::register_submenu();
+		\Urbana\GuildLedger\AddNewEntry::register_submenu();
+		\Urbana\GuildLedger\LeadStatuses::register_submenu();
 
 		// Remove the default "Urbana" submenu item created by add_menu_page
 		remove_submenu_page( 'urbana-main', 'urbana-main' );
@@ -49,9 +50,10 @@ class AdminInit {
 		OrdersPage::enqueue_scripts( $hook );
 		
 		// Guild Ledger pages
-		GuildLedgerDashboardPage::enqueue_scripts( $hook );
-		AllEntriesPage::enqueue_scripts( $hook );
-		AddNewEntryPage::enqueue_scripts( $hook );
+		\Urbana\GuildLedger\GuildLedgerAdmin::enqueue_scripts( $hook );
+		\Urbana\GuildLedger\GuildLedgerDashboard::enqueue_scripts( $hook );
+		\Urbana\GuildLedger\AllEntries::enqueue_scripts( $hook );
+		\Urbana\GuildLedger\AddNewEntry::enqueue_scripts( $hook );
 	}
 
 	public function register_settings() {

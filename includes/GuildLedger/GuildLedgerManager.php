@@ -745,4 +745,101 @@ class GuildLedgerManager {
 
 		return rest_ensure_response($stats);
 	}
+
+	public function create_tables() {
+		$charset_collate = $this->wpdb->get_charset_collate();
+		
+		$ledger_table = $this->table_prefix . 'guild_ledger';
+		$sql = "CREATE TABLE $ledger_table (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			contact_name varchar(255) NOT NULL,
+			company_council varchar(255) NOT NULL,
+			interaction_date date NOT NULL,
+			interaction_type varchar(50) NOT NULL,
+			lead_status varchar(20) DEFAULT 'new',
+			notes longtext DEFAULT NULL,
+			priority varchar(10) DEFAULT 'medium',
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY lead_status (lead_status),
+			KEY interaction_date (interaction_date),
+			KEY interaction_type (interaction_type)
+		) $charset_collate;";
+		
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		dbDelta($sql);
+	}
+
+	public function get_ledger_entries($args = array()) {
+		$defaults = array(
+			'lead_status' => '',
+			'interaction_type' => '',
+			'limit' => 25,
+			'offset' => 0,
+			'orderby' => 'interaction_date',
+			'order' => 'DESC',
+		);
+		
+		$args = wp_parse_args($args, $defaults);
+		
+		$where_conditions = array('1=1');
+		$where_values = array();
+		
+		if (!empty($args['lead_status'])) {
+			$where_conditions[] = 'lead_status = %s';
+			$where_values[] = $args['lead_status'];
+		}
+		
+		if (!empty($args['interaction_type'])) {
+			$where_conditions[] = 'interaction_type = %s';
+			$where_values[] = $args['interaction_type'];
+		}
+		
+		$where_clause = implode(' AND ', $where_conditions);
+		
+		$sql = $this->wpdb->prepare(
+			"SELECT * FROM {$this->table_prefix}guild_ledger 
+			 WHERE $where_clause 
+			 ORDER BY {$args['orderby']} {$args['order']} 
+			 LIMIT %d OFFSET %d",
+			array_merge($where_values, array($args['limit'], $args['offset']))
+		);
+		
+		return $this->wpdb->get_results($sql, ARRAY_A);
+	}
+
+	public function insert_ledger_entry($data) {
+		return $this->wpdb->insert(
+			$this->table_prefix . 'guild_ledger',
+			array(
+				'contact_name' => $data['contact_name'],
+				'company_council' => $data['company_council'],
+				'interaction_date' => $data['interaction_date'],
+				'interaction_type' => $data['interaction_type'],
+				'lead_status' => $data['lead_status'] ?? 'new',
+				'notes' => $data['notes'] ?? '',
+				'priority' => $data['priority'] ?? 'medium',
+			),
+			array('%s', '%s', '%s', '%s', '%s', '%s', '%s')
+		);
+	}
+
+	public function update_ledger_entry($id, $data) {
+		return $this->wpdb->update(
+			$this->table_prefix . 'guild_ledger',
+			$data,
+			array('id' => $id),
+			null,
+			array('%d')
+		);
+	}
+
+	public function delete_ledger_entry($id) {
+		return $this->wpdb->delete(
+			$this->table_prefix . 'guild_ledger',
+			array('id' => $id),
+			array('%d')
+		);
+	}
 }

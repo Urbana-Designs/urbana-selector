@@ -71,6 +71,9 @@ class UrbanaSelector {
 
 		// Initialize database
 		new Urbana\Database\DatabaseManager();
+
+		// Initialize Guild Ledger API
+		new Urbana\GuildLedger\GuildLedgerAPI();
 	}
 
 	public function activate() {
